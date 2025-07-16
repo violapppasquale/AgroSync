@@ -1,4 +1,36 @@
-
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AgroSync - Piante e Capienza</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #f0f0f0; padding: 30px; }
+    h1 { color: #2c3e50; }
+    label { display: block; margin: 10px 0 5px; }
+    input, button, textarea {
+      padding: 10px;
+      width: 100%;
+      max-width: 500px;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    #output {
+      background: #fff;
+      padding: 20px;
+      margin-top: 20px;
+      border-radius: 5px;
+      max-width: 600px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+    .green { color: green; font-weight: bold; }
+    .red { color: red; font-weight: bold; }
+    #map { height: 600px; margin-top: 30px; border: 1px solid #ccc; border-radius: 10px; }
+  </style>
+</head>
 <body>
   <h1>AgroSync - Calcolo Piante e Capienza</h1>
   <label>Coordinate (minimo 3, in formato decimale: lat lon)</label>
@@ -14,7 +46,6 @@
   <input type="number" id="desired" placeholder="es. 100">
 
   <button onclick="elabora()">Calcola Area di Lavoro e Punti</button>
-  <button onclick="trackPosition()">📍 Mostra la mia posizione</button>
 
   <div id="output"></div>
   <div id="map"></div>
@@ -26,38 +57,6 @@
     }).addTo(map);
 
     let polygonLayer, pointsLayer;
-    let userMarker;
-
-    function trackPosition() {
-      if (!navigator.geolocation) {
-        alert("Geolocalizzazione non supportata dal browser.");
-        return;
-      }
-
-      navigator.geolocation.watchPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lon = pos.coords.longitude;
-          if (!userMarker) {
-            userMarker = L.circleMarker([lat, lon], {
-              radius: 6,
-              color: 'red',
-              fillOpacity: 0.9
-            }).addTo(map);
-          } else {
-            userMarker.setLatLng([lat, lon]);
-          }
-        },
-        (err) => {
-          alert("Errore nella localizzazione: " + err.message);
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 10000
-        }
-      );
-    }
 
     function elabora() {
       const rawCoords = document.getElementById("coordInput").value.trim().split("\n");
@@ -103,53 +102,15 @@
       polygonLayer = L.polygon(leafletCoords, {color: 'green'}).addTo(map);
       map.fitBounds(polygonLayer.getBounds());
 
-      const centroid = turf.centroid(polygon).geometry.coordinates;
-      const lat0 = centroid[1];
-      const lon0 = centroid[0];
+      // Genera griglia di punti
+      const bbox = turf.bbox(polygon);
+      const grid = turf.pointGrid(bbox, spacing, {units: 'meters'});
+      const validPoints = turf.pointsWithinPolygon(grid, polygon);
 
-      function latlonToXY(lat, lon) {
-        const R = 6371000;
-        const x = R * (lon - lon0) * Math.cos(lat0 * Math.PI / 180) * Math.PI / 180;
-        const y = R * (lat - lat0) * Math.PI / 180;
-        return [x, y];
-      }
-
-      function xyToLatlon(x, y) {
-        const R = 6371000;
-        const lat = lat0 + (y / R) * 180 / Math.PI;
-        const lon = lon0 + (x / (R * Math.cos(lat0 * Math.PI / 180))) * 180 / Math.PI;
-        return [lat, lon];
-      }
-
-      const localCoords = coords.map(([lon, lat]) => latlonToXY(lat, lon));
-      const localPolygon = turf.polygon([localCoords]);
-
-      let [minx, miny, maxx, maxy] = turf.bbox(localPolygon);
-      minx += border;
-      maxx -= border;
-      miny += border;
-      maxy -= border;
-
-      const nx = Math.floor((maxx - minx) / spacing);
-      const ny = Math.floor((maxy - miny) / spacing);
-
-      const gridPoints = [];
-      for (let i = 0; i <= nx; i++) {
-        for (let j = 0; j <= ny; j++) {
-          const x = minx + i * spacing;
-          const y = miny + j * spacing;
-          const pt = turf.point([x, y]);
-          if (turf.booleanPointInPolygon(pt, localPolygon)) {
-            const [lat, lon] = xyToLatlon(x, y);
-            gridPoints.push({ lat, lon });
-          }
-        }
-      }
-
-      let maxCapacity = gridPoints.length;
-      let usedPoints = gridPoints;
+      let maxCapacity = validPoints.features.length;
+      let placedPoints = validPoints.features;
       if (!isNaN(desiredPlants) && desiredPlants < maxCapacity) {
-        usedPoints = gridPoints.slice(0, desiredPlants);
+        placedPoints = validPoints.features.slice(0, desiredPlants);
       }
 
       output.innerHTML = `
@@ -159,15 +120,17 @@
         Distanza dal bordo: ${border} m</p>
         <p><strong>Superficie stimata (geodetica):</strong> ${areaM2} m² → ${areaHa} ettari</p>
         <p><strong>Capienza massima:</strong> ${maxCapacity} piante</p>
-        ${!isNaN(desiredPlants) ? `<p><strong>Piante inserite:</strong> ${usedPoints.length}</p>` : ""}
+        ${!isNaN(desiredPlants) ? `<p><strong>Piante inserite:</strong> ${placedPoints.length}</p>` : ""}
       `;
 
       pointsLayer = L.layerGroup();
-      usedPoints.forEach(({ lat, lon }) => {
-        L.circleMarker([lat, lon], { radius: 2, color: 'blue' }).addTo(pointsLayer);
+      placedPoints.forEach(pt => {
+        const [lon, lat] = pt.geometry.coordinates;
+        L.circleMarker([lat, lon], {radius: 2, color: 'blue'}).addTo(pointsLayer);
       });
       pointsLayer.addTo(map);
     }
   </script>
 </body>
+</html>
 
