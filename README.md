@@ -34,7 +34,9 @@
 <body>
   <h1>AgroSync - Calcolo Piante e Capienza</h1>
   <label>Coordinate (minimo 3, in formato decimale: lat lon)</label>
-  <textarea id="coordInput" rows="5" placeholder="38.937222 17.015556\n38.937222 17.016389\n..."></textarea>
+  <textarea id="coordInput" rows="5" placeholder="38.937222 17.015556
+38.937222 17.016389
+..."></textarea>
 
   <label>Distanza tra le piante (in metri)</label>
   <input type="number" id="spacing" placeholder="es. 6">
@@ -46,6 +48,7 @@
   <input type="number" id="desired" placeholder="es. 100">
 
   <button onclick="elabora()">Calcola Area di Lavoro e Punti</button>
+  <button onclick="trackPosition()">📍 Mostra la mia posizione</button>
 
   <div id="output"></div>
   <div id="map"></div>
@@ -57,6 +60,39 @@
     }).addTo(map);
 
     let polygonLayer, pointsLayer;
+    let userMarker = null;
+
+    function trackPosition() {
+      if (!navigator.geolocation) {
+        alert("Geolocalizzazione non supportata dal browser.");
+        return;
+      }
+
+      navigator.geolocation.watchPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+
+          if (!userMarker) {
+            userMarker = L.circleMarker([lat, lon], {
+              radius: 6,
+              color: 'red',
+              fillOpacity: 1
+            }).addTo(map);
+          } else {
+            userMarker.setLatLng([lat, lon]);
+          }
+        },
+        (err) => {
+          alert("Errore nella localizzazione: " + err.message);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    }
 
     function elabora() {
       const rawCoords = document.getElementById("coordInput").value.trim().split("\n");
@@ -102,7 +138,6 @@
       polygonLayer = L.polygon(leafletCoords, {color: 'green'}).addTo(map);
       map.fitBounds(polygonLayer.getBounds());
 
-      // Genera griglia di punti
       const bbox = turf.bbox(polygon);
       const grid = turf.pointGrid(bbox, spacing, {units: 'meters'});
       const validPoints = turf.pointsWithinPolygon(grid, polygon);
