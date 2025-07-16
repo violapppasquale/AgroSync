@@ -1,37 +1,4 @@
 
-<!DOCTYPE html>
-<html>
-<head>
-  <title>AgroSync - Piante e Capienza</title>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <style>
-    body { font-family: sans-serif; background: #f0f0f0; padding: 30px; }
-    h1 { color: #2c3e50; }
-    label { display: block; margin: 10px 0 5px; }
-    input, button, textarea {
-      padding: 10px;
-      width: 100%;
-      max-width: 500px;
-      font-size: 16px;
-      margin-bottom: 10px;
-    }
-    #output {
-      background: #fff;
-      padding: 20px;
-      margin-top: 20px;
-      border-radius: 5px;
-      max-width: 600px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
-    }
-    .green { color: green; font-weight: bold; }
-    .red { color: red; font-weight: bold; }
-    #map { height: 600px; margin-top: 30px; border: 1px solid #ccc; border-radius: 10px; }
-  </style>
-</head>
 <body>
   <h1>AgroSync - Calcolo Piante e Capienza</h1>
   <label>Coordinate (minimo 3, in formato decimale: lat lon)</label>
@@ -47,6 +14,7 @@
   <input type="number" id="desired" placeholder="es. 100">
 
   <button onclick="elabora()">Calcola Area di Lavoro e Punti</button>
+  <button onclick="trackPosition()">📍 Mostra la mia posizione</button>
 
   <div id="output"></div>
   <div id="map"></div>
@@ -58,6 +26,38 @@
     }).addTo(map);
 
     let polygonLayer, pointsLayer;
+    let userMarker;
+
+    function trackPosition() {
+      if (!navigator.geolocation) {
+        alert("Geolocalizzazione non supportata dal browser.");
+        return;
+      }
+
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          if (!userMarker) {
+            userMarker = L.circleMarker([lat, lon], {
+              radius: 6,
+              color: 'red',
+              fillOpacity: 0.9
+            }).addTo(map);
+          } else {
+            userMarker.setLatLng([lat, lon]);
+          }
+        },
+        (err) => {
+          alert("Errore nella localizzazione: " + err.message);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 10000
+        }
+      );
+    }
 
     function elabora() {
       const rawCoords = document.getElementById("coordInput").value.trim().split("\n");
@@ -103,8 +103,6 @@
       polygonLayer = L.polygon(leafletCoords, {color: 'green'}).addTo(map);
       map.fitBounds(polygonLayer.getBounds());
 
-      
-      // Genera griglia di punti ordinati
       const centroid = turf.centroid(polygon).geometry.coordinates;
       const lat0 = centroid[1];
       const lon0 = centroid[0];
@@ -169,8 +167,7 @@
         L.circleMarker([lat, lon], { radius: 2, color: 'blue' }).addTo(pointsLayer);
       });
       pointsLayer.addTo(map);
-
     }
   </script>
 </body>
-</html>
+
