@@ -34,9 +34,7 @@
 <body>
   <h1>AgroSync - Calcolo Piante e Capienza</h1>
   <label>Coordinate (minimo 3, in formato decimale: lat lon)</label>
-  <textarea id="coordInput" rows="5" placeholder="38.937222 17.015556
-38.937222 17.016389
-..."></textarea>
+  <textarea id="coordInput" rows="5" placeholder="38.937222 17.015556\n38.937222 17.016389\n..."></textarea>
 
   <label>Distanza tra le piante (in metri)</label>
   <input type="number" id="spacing" placeholder="es. 6">
@@ -168,4 +166,5 @@
   </script>
 </body>
 </html>
+
 
